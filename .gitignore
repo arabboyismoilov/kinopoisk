@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+payme_sandbox.db
+payme_sandbox.zip
+venv/
+.venv/
+.idea/
+.vscode/
+media/
