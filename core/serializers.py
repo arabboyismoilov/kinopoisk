@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from datetime import datetime, timedelta
 
-from core.models import Movie, Subscription, Payment
+from core.models import Movie, Subscription, Payment, Order, UserSubscription, VerificationOTP, MovieVideo
 
 User = get_user_model()
 
@@ -70,6 +71,7 @@ class MovieListSerializer(serializers.ModelSerializer):
         
 
 class MovieDetailSerializer(serializers.ModelSerializer):
+    video_url = serializers.SerializerMethodField(source="video__file.url")
     class Meta:
         model = Movie
         fields = [
@@ -88,28 +90,61 @@ class MovieDetailSerializer(serializers.ModelSerializer):
             'aktyorlar',
             'sifati',
             'tillar',
-            'video'
+            'video_url'
         ]
-        
 
-class PaymentSerializer(serializers.ModelSerializer):
+    def get_video_url(self, obj):
+        return obj.video.file.url
+
+class OrderUser(serializers.ModelSerializer):
     class Meta:
-        model = Payment
-        fields = [
-            'amount', 'provider_type', 'id', 'created_at'
-        ]
-        read_only_fields = ['id', 'created_at']
-        
-class SubscriptionSerializer(serializers.ModelSerializer):
-    payment = PaymentSerializer()
+        model = User
+        fields = ['id', 'username']    
+
+
+class SubscritionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = [
-            'id', 'start_date', 'end_date', 'type', 'payment'
-        ]
-        
+        fields = ['id', 'type', 'price', 'duration', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class OrderUserSubscription(serializers.ModelSerializer):
+    subscription = SubscritionSerializer(read_only=True)
+    class Meta:
+        model = UserSubscription
+        fields = ['id', 'price', 'status', 'start_date', 'end_date', 'subscription']
+
+
+class OrderCreateSerializer(serializers.ModelSerializer):
+    subscription_id = serializers.PrimaryKeyRelatedField(queryset = Subscription.objects.all(), write_only=True)
+    user_subscription = OrderUserSubscription(read_only=True)
+    user = OrderUser(read_only=True)
+    
+    class Meta:
+        model = Order
+        fields = ['id', 'subscription_id', 'user_subscription', 'user', 'amount', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status', 'amount']
+    
     def create(self, validated_data):
-        user = validated_data.get('user')
-        payment_data = validated_data.pop('payment')
-        payment = Payment.objects.create(**payment_data, user = user)
-        return Subscription.objects.create(**validated_data, payment = payment)
+        user = validated_data['user']
+        subscription = validated_data['subscription_id']
+        end_date = datetime.now() + timedelta(days=subscription.duration)
+        
+        us = UserSubscription.objects.create(user=user, subscription=subscription, price=subscription.price, end_date=end_date)
+        return Order.objects.create(user=user, user_subscription=us, amount=subscription.price)
+    
+    
+class PaymeApiRequestSerializer(serializers.Serializer):
+    method = serializers.CharField()
+    params = serializers.DictField()
+    
+
+class MovieVideoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MovieVideo
+        fields = ['id', 'title', 'file', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+        
+        

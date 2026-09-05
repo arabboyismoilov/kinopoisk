@@ -18,6 +18,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 env.read_env(BASE_DIR / '.env')
 
+PAYME_CHECKOUT_URL = env("PAYME_CHECKOUT_URL")
+PAYME_MERCHANT_ID = env("PAYME_MERCHANT_ID")
+PAYME_USERNAME = env("PAYME_USERNAME")
+PAYME_PAROL = env("PAYME_PAROL")
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
@@ -44,6 +49,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'drf_spectacular',
     'django_filters',
+    'storages',
     'core'
 ]
 
@@ -55,6 +61,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middlewares.CorrelationIdMiddleware',
+    'core.middlewares.RquestInfoMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -163,3 +171,82 @@ STATIC_URL = 'static/'
 STATIC_ROOT = env("STATIC_ROOT", default=BASE_DIR / 'static')
 MEDIA_URL = '/media/'
 MEDIA_ROOT = env("MEDIA_ROOT", default=BASE_DIR / 'media')
+
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        'correlation_filter': {
+            "()": "core.filters.CorrelationIdFilter"
+        }
+    },
+    "formatters": {
+        "simple": {
+            "format": "{name} {message} {filename} {lineno} {requestid}",
+            "style": "{"
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            "filters": ['correlation_filter']
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "formatter": "simple",
+            "filename": BASE_DIR / 'logs' / "fileapp.log",
+            "filters": ['correlation_filter']
+            
+        },
+        "rotating_file": {
+            "class": "concurrent_log_handler.ConcurrentRotatingFileHandler",
+            'formatter': "simple",
+            "filename":  BASE_DIR / 'rotatinglogs' / 'app.log',
+            "maxBytes": 1024 * 1024 * 5,
+            "backupCount": 5,
+            "filters": ['correlation_filter']
+            
+        }
+    },
+    "loggers": {
+        "root": {
+            "handlers": ['console'],
+            "level": "INFO"
+        },
+        "core": {
+            "handlers": ['console', 'rotating_file'],
+            "level": "INFO",
+            "propagate": False
+        },
+        "django.server": {
+            "handlers": ['file'],
+            "level": "DEBUG",
+            "propagate": False
+        }
+    }
+}
+
+
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+AWS_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = env("R2_BUCKET_NAME")
+AWS_S3_REGION_NAME = "auto"
+AWS_S3_ENDPOINT_URL = env('R2_S3_URL')
+
+# R2 Specific Adjustments
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = True  # Set False if your bucket/custom domain is public
+MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
